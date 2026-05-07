@@ -1,0 +1,23 @@
+# Security
+.env
+
+# Virtual Environments
+venv/
+env/
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# Airflow Logs & Plugins
+logs/
+plugins/
+
+# Data Files (Never upload large data to GitHub)
+raw_data/
+*.json
+*.parquet
+*.csv
+
+# OS Files
+.DS_Store

@@ -1,0 +1,14 @@
+# Ignore Airflow logs and dynamic files
+logs/
+plugins/
+dags/
+
+# Ignore the local virtual environment
+venv/
+__pycache__/
+
+# Ignore local data
+raw_data/
+
+# CRITICAL SECURITY: Never bake secret keys into the image!
+.env
