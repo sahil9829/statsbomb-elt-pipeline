@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: int_match_teams
+    description: Match x team bridge (two rows per match) exposing each side's opponent.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [match_id, team_id]
+
+  - name: int_match_lengths
+    description: Match length in minutes, and whether extra time / penalties were played.
+    columns:
+      - name: match_id
+        data_tests: [unique, not_null]
+      - name: match_length_minutes
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 85
+                max_value: 135
+
+  - name: int_match_team_stats
+    description: Team attacking totals per match (shoot-out excluded).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [match_id, team_id]
+
+  - name: int_player_match_stats
+    description: Player x match totals combining lineups and events.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [match_id, player_id]
+    columns:
+      - name: minutes_played
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 135

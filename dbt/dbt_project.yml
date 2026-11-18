@@ -1,0 +1,39 @@
+name: statsbomb
+version: "1.0.0"
+config-version: 2
+profile: statsbomb
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages", "logs"]
+
+vars:
+  # dim_date spine. StatsBomb open data reaches back to the 1958 World Cup.
+  dim_date_start: "1958-01-01"
+  dim_date_end: "2031-01-01"
+  # Unknown-member surrogate id used when a fact row has no player/team/venue/referee.
+  unknown_id: -1
+
+models:
+  statsbomb:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table
+      # Athena-only (ignored by DuckDB): marts are Iceberg tables in the data bucket.
+      +table_type: iceberg
+      +format: parquet
+
+data_tests:
+  statsbomb:
+    +severity: error
+    +store_failures: "{{ target.type == 'duckdb' }}"

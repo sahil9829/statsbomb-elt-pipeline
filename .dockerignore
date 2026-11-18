@@ -1,14 +1,18 @@
-# Ignore Airflow logs and dynamic files
+# Only requirements files are COPY'd into the image; code is bind-mounted.
 logs/
 plugins/
 dags/
-
-# Ignore the local virtual environment
-venv/
-__pycache__/
-
-# Ignore local data
+data_lake/
 raw_data/
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+*.duckdb
+terraform/
+venv/
+.venv/
+__pycache__/
+.git/
 
-# CRITICAL SECURITY: Never bake secret keys into the image!
+# CRITICAL SECURITY: never bake secrets into the image
 .env

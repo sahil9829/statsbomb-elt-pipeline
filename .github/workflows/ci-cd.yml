@@ -2,34 +2,152 @@ name: Sports Pipeline CI/CD
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request: # Runs when teammates try to merge code
-    branches: [ "main" ]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"   # matches AWS Glue 5.0
+  JAVA_VERSION: "17"
 
 jobs:
-  build-and-test:
+  lint-and-unit-tests:
+    name: Lint & unit tests (extract + PySpark)
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python 3.8
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.8'
-        
-    - name: Install Pipeline Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install requests boto3 pandas pyarrow flake8
-        
-    - name: Run Syntax & Linting Checks
-      run: |
-        # This catches undefined variables or syntax errors in your scripts
-        flake8 scripts/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        
-    - name: Verify Docker Build
-      run: |
-        # Ensures the container still builds successfully with any new code
-        docker compose build
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: flake8 . --count --statistics
+
+      - name: Unit tests
+        run: pytest -v
+
+  dag-validation:
+    name: Airflow DAG integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Airflow (official constraints)
+        run: |
+          AIRFLOW_VERSION=2.10.5
+          pip install "apache-airflow==${AIRFLOW_VERSION}" apache-airflow-providers-amazon pytest \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
+
+      - name: DAG tests
+        run: pytest tests/test_dag.py -v
+
+  dbt-integration:
+    name: End-to-end (extract -> Spark -> dbt on DuckDB)
+    needs: lint-and-unit-tests
+    runs-on: ubuntu-latest
+    env:
+      DBT_PROFILES_DIR: ${{ github.workspace }}/dbt
+      DBT_TARGET: duckdb
+      DBT_PROCESSED_ROOT: ${{ github.workspace }}/data_lake/processed/statsbomb
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Extract a sample (FIFA World Cup 2018, first 8 matches)
+        run: python scripts/extract_statsbomb.py --lake-root ./data_lake --competitions 43:3 --max-matches 8
+
+      - name: PySpark transform
+        run: python spark/jobs/statsbomb_transform.py --lake-root ./data_lake
+
+      - name: dbt deps
+        working-directory: dbt
+        run: dbt deps
+
+      - name: dbt parse for the Athena target (adapter-specific config check)
+        working-directory: dbt
+        run: dbt parse --target athena
+
+      - name: dbt build (models + unit tests + data tests)
+        working-directory: dbt
+        run: dbt build
+
+      - name: dbt source freshness
+        working-directory: dbt
+        run: dbt source freshness
+
+      - name: Upload dbt artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-artifacts
+          path: |
+            dbt/target/run_results.json
+            dbt/target/manifest.json
+            dbt/logs/
+          if-no-files-found: ignore
+
+  terraform:
+    name: Terraform fmt & validate
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform init (no backend)
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform validate
+
+  docker-build:
+    name: Airflow image build
+    needs: lint-and-unit-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker compose build

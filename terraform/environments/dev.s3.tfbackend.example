@@ -1,0 +1,6 @@
+# Copy to dev.s3.tfbackend and point at a pre-existing state bucket.
+bucket       = "my-terraform-state-bucket"
+key          = "statsbomb-elt-pipeline/dev/terraform.tfstate"
+region       = "eu-west-2"
+encrypt      = true
+use_lockfile = true # native S3 state locking (Terraform >= 1.10), no DynamoDB table needed
