@@ -1,0 +1,73 @@
+with source as (
+    select * from {{ source('statsbomb', 'events') }}
+)
+
+select
+    event_id,
+    match_id,
+    event_index,
+    period,
+    event_timestamp,
+    minute,
+    second,
+    minute + second / 60.0                                       as match_clock_minutes,
+    type_id                                                      as event_type_id,
+    type_name                                                    as event_type_name,
+    possession,
+    possession_team_id,
+    play_pattern_id,
+    play_pattern_name,
+    team_id,
+    player_id,
+    player_name,
+    position_id,
+    position_name,
+    location_x,
+    location_y,
+    coalesce(pass_end_location_x, carry_end_location_x, shot_end_location_x) as end_location_x,
+    coalesce(pass_end_location_y, carry_end_location_y, shot_end_location_y) as end_location_y,
+    duration,
+    under_pressure                                               as is_under_pressure,
+    counterpress                                                 as is_counterpress,
+
+    -- passes: a null outcome means the pass was completed
+    type_name = 'Pass'                                           as is_pass,
+    type_name = 'Pass' and pass_outcome_name is null             as is_pass_completed,
+    pass_recipient_id,
+    pass_length,
+    pass_height_name,
+    pass_type_name,
+    pass_body_part_name,
+    pass_outcome_name,
+    pass_is_cross,
+    pass_is_shot_assist,
+    pass_is_goal_assist,
+
+    -- shots: period 5 is the penalty shoot-out, which never counts towards the score
+    type_name = 'Shot'                                           as is_shot,
+    type_name = 'Shot' and period < 5                            as is_shot_in_play,
+    type_name = 'Shot' and period < 5 and shot_outcome_name = 'Goal' as is_goal,
+    type_name = 'Shot'
+        and shot_outcome_name in ('Goal', 'Saved', 'Saved To Post') as is_shot_on_target,
+    type_name = 'Own Goal For'                                   as is_own_goal_for,
+    shot_statsbomb_xg                                            as shot_xg,
+    shot_outcome_name,
+    shot_type_name,
+    shot_body_part_name,
+    shot_technique_name,
+    shot_end_location_z,
+    shot_key_pass_id,
+    shot_first_time,
+
+    dribble_outcome_name,
+    duel_type_name,
+    duel_outcome_name,
+    interception_outcome_name,
+    goalkeeper_type_name,
+    goalkeeper_outcome_name,
+    coalesce(foul_committed_card_name, bad_behaviour_card_name)  as card_name,
+    substitution_replacement_id,
+    substitution_outcome_name,
+    tactics_formation,
+    cast(_ingested_at as timestamp)                              as _ingested_at
+from source

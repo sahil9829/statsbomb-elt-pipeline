@@ -1,0 +1,6 @@
+# Local development & CI (Python 3.11, Java 17).
+-r requirements.txt
+pyspark==3.5.5
+pytest>=8,<10
+flake8>=7,<8
+-r docker/airflow/requirements-dbt.txt

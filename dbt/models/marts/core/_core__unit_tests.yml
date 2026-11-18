@@ -1,0 +1,51 @@
+version: 2
+
+# dbt unit tests: pin down business logic with hand-written inputs, independent of data.
+unit_tests:
+  - name: fct_matches_derives_result_and_team_totals
+    model: fct_matches
+    given:
+      - input: ref('stg_statsbomb__matches')
+        rows:
+          - {match_id: 1, match_date: "2018-07-15", competition_id: 43, season_id: 3, home_team_id: 10, away_team_id: 20, home_score: 4, away_score: 2, stadium_id: null, referee_id: 7}
+          - {match_id: 2, match_date: "2018-07-11", competition_id: 43, season_id: 3, home_team_id: 30, away_team_id: 10, home_score: 1, away_score: 1, stadium_id: 5, referee_id: 7}
+      - input: ref('int_match_lengths')
+        rows:
+          - {match_id: 1, match_length_minutes: 95.5, went_to_extra_time: false, went_to_penalties: false}
+          - {match_id: 2, match_length_minutes: 124.0, went_to_extra_time: true, went_to_penalties: true}
+      - input: ref('int_match_team_stats')
+        rows:
+          - {match_id: 1, team_id: 10, shots: 12, shots_on_target: 6, xg: 2.4567, passes: 400}
+          - {match_id: 1, team_id: 20, shots: 8, shots_on_target: 3, xg: 1.1, passes: 300}
+          # match 2: away side has no events -> zero-filled, not null
+          - {match_id: 2, team_id: 30, shots: 10, shots_on_target: 4, xg: 1.0, passes: 350}
+    expect:
+      rows:
+        - {match_id: 1, match_result: home_win, total_goals: 6, goal_difference: 2, home_shots: 12, away_shots: 8, home_xg: 2.457, away_xg: 1.1, went_to_penalties: false}
+        - {match_id: 2, match_result: draw, total_goals: 2, goal_difference: 0, home_shots: 10, away_shots: 0, home_xg: 1.0, away_xg: 0, went_to_penalties: true}
+
+  - name: player_minutes_resolve_final_whistle_and_bench
+    model: int_player_match_stats
+    given:
+      - input: ref('stg_statsbomb__lineups')
+        rows:
+          # started, played to the final whistle (off_minute null) -> full match length
+          - {match_id: 1, team_id: 10, player_id: 100, appeared: true, is_starter: true, on_minute: 0.0, off_minute: null, yellow_cards: 0, red_cards: 0}
+          # came on at 60:30, subbed off at 80:00
+          - {match_id: 1, team_id: 10, player_id: 101, appeared: true, is_starter: false, on_minute: 60.5, off_minute: 80.0, yellow_cards: 1, red_cards: 0}
+          # unused substitute
+          - {match_id: 1, team_id: 10, player_id: 102, appeared: false, is_starter: false, on_minute: null, off_minute: null, yellow_cards: 0, red_cards: 0}
+      - input: ref('int_match_lengths')
+        rows:
+          - {match_id: 1, match_length_minutes: 94.25}
+      - input: ref('stg_statsbomb__events')
+        rows:
+          - {match_id: 1, player_id: 100, event_type_name: Shot, is_shot_in_play: true, is_shot_on_target: true, is_goal: true, shot_xg: 0.6, is_pass: false, is_pass_completed: false, pass_is_shot_assist: false, pass_is_goal_assist: false}
+          - {match_id: 1, player_id: 100, event_type_name: Shot, is_shot_in_play: false, is_shot_on_target: true, is_goal: false, shot_xg: 0.78, is_pass: false, is_pass_completed: false, pass_is_shot_assist: false, pass_is_goal_assist: false}
+          - {match_id: 1, player_id: 101, event_type_name: Pass, is_shot_in_play: false, is_shot_on_target: false, is_goal: false, shot_xg: null, is_pass: true, is_pass_completed: true, pass_is_shot_assist: true, pass_is_goal_assist: true}
+    expect:
+      rows:
+        # the shoot-out penalty (is_shot_in_play = false) is excluded from shots and xG
+        - {player_id: 100, minutes_played: 94.3, shots: 1, goals: 1, xg: 0.6, passes: 0, assists: 0}
+        - {player_id: 101, minutes_played: 19.5, shots: 0, goals: 0, xg: 0, passes: 1, assists: 1}
+        - {player_id: 102, minutes_played: 0, shots: 0, goals: 0, xg: 0, passes: 0, assists: 0}

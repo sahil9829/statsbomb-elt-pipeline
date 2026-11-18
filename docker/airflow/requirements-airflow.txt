@@ -1,0 +1,2 @@
+# Extra packages for the Airflow image (Airflow already ships boto3 + the Amazon provider).
+pyspark==3.5.5

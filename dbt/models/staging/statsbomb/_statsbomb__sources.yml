@@ -1,0 +1,62 @@
+version: 2
+
+sources:
+  - name: statsbomb
+    description: >
+      Processed zone written by the PySpark job (spark/jobs/statsbomb_transform.py).
+      On Athena these are Glue Catalog tables registered by Terraform from
+      contracts/processed_tables.json; on DuckDB they are read straight from Parquet.
+    schema: "{{ env_var('DBT_SCHEMA_PREFIX', 'statsbomb') }}_processed"
+    config:
+      meta:
+        # dbt-duckdb only: resolve each source table to its Parquet folder.
+        external_location: "read_parquet('{{ env_var('DBT_PROCESSED_ROOT', '../data_lake/processed/statsbomb') }}/{name}/*.parquet')"
+      freshness:
+        warn_after: {count: 2, period: day}
+        error_after: {count: 7, period: day}
+      loaded_at_field: _ingested_at
+    tables:
+      - name: competitions
+        description: One row per competition-season in the StatsBomb catalogue.
+        data_tests:
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: [competition_id, season_id]
+        columns:
+          - name: competition_id
+            data_tests: [not_null]
+          - name: season_id
+            data_tests: [not_null]
+
+      - name: matches
+        description: One row per match.
+        columns:
+          - name: match_id
+            data_tests: [unique, not_null]
+
+      - name: events
+        description: One row per on-pitch event.
+        columns:
+          - name: event_id
+            data_tests: [unique, not_null]
+          - name: match_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('statsbomb', 'matches')
+                    field: match_id
+
+      - name: lineups
+        description: One row per squad member per team per match.
+        data_tests:
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: [match_id, team_id, player_id]
+        columns:
+          - name: match_id
+            data_tests:
+              - relationships:
+                  arguments:
+                    to: source('statsbomb', 'matches')
+                    field: match_id

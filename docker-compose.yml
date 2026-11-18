@@ -1,40 +1,53 @@
-# This block defines settings that all Airflow containers will share
+# Local Airflow stack. Copy .env.example to .env first.
 x-airflow-common:
   &airflow-common
-  image: apache/airflow:2.7.2
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  image: statsbomb-airflow:local
+  user: "${AIRFLOW_UID:-50000}:0"
   env_file:
-    - .env
+    - path: .env
+      required: false
   environment:
     &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
-    AIRFLOW__CORE__LOAD_EXAMPLES: 'false' # Keeps your UI clean of sample data
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    # Pipeline defaults: fully local (no AWS) unless overridden in .env
+    LAKE_ROOT: ${LAKE_ROOT:-/opt/airflow/data_lake}
+    SPARK_RUNNER: ${SPARK_RUNNER:-local}
+    DBT_TARGET: ${DBT_TARGET:-duckdb}
+    STATSBOMB_COMPETITIONS: ${STATSBOMB_COMPETITIONS:-43:3}
   volumes:
-    # This maps your local folders into the containers so Airflow can see your code
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
     - ./scripts:/opt/airflow/scripts
-    - ./raw_data:/opt/airflow/raw_data
+    - ./spark:/opt/airflow/spark
+    - ./dbt:/opt/airflow/dbt
+    - ./contracts:/opt/airflow/contracts
+    - ./data_lake:/opt/airflow/data_lake
   depends_on:
     postgres:
       condition: service_healthy
 
 services:
-  # 1. The Database to store task history
   postgres:
     image: postgres:13
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
       POSTGRES_DB: airflow
+    volumes:
+      - postgres-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
       retries: 5
       start_period: 5s
 
-  # 2. The User Interface
   airflow-webserver:
     <<: *airflow-common
     command: webserver
@@ -47,18 +60,20 @@ services:
       retries: 5
       start_period: 30s
 
-  # 3. The Engine that triggers the tasks
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
 
-  # 4. A one-time setup script to create your login credentials
+  # One-off: migrate the metadata DB and create the admin login.
   airflow-init:
     <<: *airflow-common
     command: version
     environment:
       <<: *airflow-common-env
-      _AIRFLOW_DB_UPGRADE: 'true'
+      _AIRFLOW_DB_MIGRATE: 'true'
       _AIRFLOW_WWW_USER_CREATE: 'true'
-      _AIRFLOW_WWW_USER_USERNAME: airflow
-      _AIRFLOW_WWW_USER_PASSWORD: airflow
+      _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-airflow}
+      _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-airflow}
+
+volumes:
+  postgres-db:
