@@ -4,6 +4,17 @@ An end-to-end ELT pipeline that ingests [StatsBomb open data](https://github.com
 
 The whole pipeline also runs **locally with no AWS account**: Spark reads and writes a local folder, and dbt targets DuckDB. CI uses this to run the full pipeline on real data for every PR.
 
+## 📌 Project status
+
+| Part | Status |
+|---|---|
+| Extract → PySpark → dbt star schema | ✅ Runs end to end locally and in CI on real StatsBomb data; all 165 dbt checks pass |
+| Airflow DAG and Docker image | ✅ DAG integrity tests and the image build run in CI |
+| Terraform | ⚠️ **Validated, not deployed.** CI runs `terraform fmt -check` and `terraform validate`, but `terraform apply` has not been run against a real AWS account |
+| Glue job and Athena (dbt `athena` target) | ⚠️ **Untested on AWS.** The same Spark script runs locally and the dbt project parses under the Athena adapter, but neither has run on Glue or Athena |
+
+Things to verify on a first real deploy: IAM permissions for the Glue job and for dbt on Athena, Iceberg table creation by dbt-athena, and Glue 5.0 reading the raw JSON from S3.
+
 ## 🏗️ Architecture
 
 ```mermaid
@@ -63,6 +74,38 @@ Design choices:
 * **Degenerate dimensions** such as `match_id`, `period` and `competition_stage_name` live on the facts.
 * **Penalty shoot-outs** (period 5) are excluded from goals and xG, so the event-level goals match the published score. A singular test checks this.
 
+### dbt lineage
+
+Sources (green) flow through staging and intermediate views into the dimensions and facts. Tests are hidden for readability. Run `make dbt-docs` to explore it interactively.
+
+![dbt lineage graph: StatsBomb sources through staging and intermediate models into the dim_* and fct_* star schema](docs/images/dbt-lineage.png)
+
+### Example query
+
+Top scorers at the 2018 World Cup, from the star schema (DuckDB, full tournament):
+
+```sql
+select p.player_display_name, t.team_name,
+       sum(f.goals) as goals, round(sum(f.xg), 2) as xg,
+       sum(f.assists) as assists, cast(round(sum(f.minutes_played)) as int) as minutes_played
+from statsbomb_marts.fct_player_match f
+join statsbomb_marts.dim_player p on p.player_key = f.player_key
+join statsbomb_marts.dim_team   t on t.team_key   = f.team_key
+group by 1, 2
+order by goals desc, xg desc
+limit 5;
+```
+
+| player_display_name | team_name | goals | xg | assists | minutes_played |
+|---|---|---|---|---|---|
+| Harry Kane | England | 6 | 4.03 | 0 | 591 |
+| Antoine Griezmann | France | 4 | 3.56 | 2 | 583 |
+| Cristiano Ronaldo | Portugal | 4 | 2.7 | 0 | 383 |
+| Romelu Lukaku | Belgium | 4 | 2.61 | 0 | 490 |
+| Kylian Mbappé | France | 4 | 1.78 | 0 | 552 |
+
+Kane's 6 goals match his real 2018 Golden Boot.
+
 ## 🧪 Testing
 
 | Where | What |
@@ -98,6 +141,8 @@ make up                             # http://localhost:8080  (airflow / airflow)
 Unpause and trigger `statsbomb_elt`.
 
 ### 3. On AWS
+
+> ⚠️ This path has not been run yet: the Terraform is validated in CI but has never been applied. See [Project status](#-project-status).
 
 ```bash
 cp terraform/environments/dev.s3.tfbackend.example terraform/environments/dev.s3.tfbackend   # edit state bucket
