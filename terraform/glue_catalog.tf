@@ -32,7 +32,7 @@ resource "aws_glue_catalog_table" "processed" {
     ser_de_info {
       name                  = "parquet"
       serialization_library = "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
-      parameters            = {
+      parameters = {
         "serialization.format" = "1"
       }
     }

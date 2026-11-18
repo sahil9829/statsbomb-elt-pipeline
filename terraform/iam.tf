@@ -65,8 +65,8 @@ data "aws_iam_policy_document" "glue_job" {
   }
 
   statement {
-    sid       = "Logs"
-    actions   = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:AssociateKmsKey"]
+    sid     = "Logs"
+    actions = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:AssociateKmsKey"]
     resources = [
       "${aws_cloudwatch_log_group.glue_transform.arn}:*",
       "arn:${local.partition}:logs:${local.region}:${local.account_id}:log-group:/aws-glue/*",
@@ -101,7 +101,7 @@ data "aws_iam_policy_document" "pipeline_assume" {
   statement {
     actions = ["sts:AssumeRole"]
     principals {
-      type        = "AWS"
+      type = "AWS"
       identifiers = (
         length(var.pipeline_trusted_principal_arns) > 0
         ? var.pipeline_trusted_principal_arns
@@ -125,8 +125,8 @@ data "aws_iam_policy_document" "pipeline" {
   }
 
   statement {
-    sid       = "LakeReadWrite"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
+    sid     = "LakeReadWrite"
+    actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"]
     resources = [
       "${local.lake_arn}/raw/*",       # extract
       "${local.lake_arn}/processed/*", # local Spark runner
@@ -141,7 +141,7 @@ data "aws_iam_policy_document" "pipeline" {
   }
 
   statement {
-    sid     = "Athena"
+    sid = "Athena"
     actions = [
       "athena:StartQueryExecution",
       "athena:StopQueryExecution",
@@ -162,7 +162,7 @@ data "aws_iam_policy_document" "pipeline" {
   }
 
   statement {
-    sid     = "GlueCatalog"
+    sid = "GlueCatalog"
     actions = [
       "glue:GetDatabase",
       "glue:GetDatabases",

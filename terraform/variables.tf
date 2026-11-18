@@ -82,8 +82,8 @@ variable "pipeline_trusted_principal_arns" {
     IAM principals allowed to assume the pipeline role (e.g. the role your Airflow
     workers run as). Empty = any principal in this account with sts:AssumeRole permission.
   EOT
-  type    = list(string)
-  default = []
+  type        = list(string)
+  default     = []
 }
 
 variable "force_destroy_buckets" {

@@ -44,9 +44,9 @@ data "aws_iam_policy_document" "tls_only" {
   for_each = aws_s3_bucket.this
 
   statement {
-    sid       = "DenyInsecureTransport"
-    effect    = "Deny"
-    actions   = ["s3:*"]
+    sid     = "DenyInsecureTransport"
+    effect  = "Deny"
+    actions = ["s3:*"]
     resources = [
       each.value.arn,
       "${each.value.arn}/*",
