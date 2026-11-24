@@ -22,6 +22,7 @@ data_lake/
 raw_data/
 *.json
 !contracts/*.json
+!powerbi/*.json
 *.parquet
 *.csv
 # ...except the small, curated Power BI extract (game-state marts, < 1 MB)
