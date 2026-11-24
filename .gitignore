@@ -24,6 +24,8 @@ raw_data/
 !contracts/*.json
 *.parquet
 *.csv
+# ...except the small, curated Power BI extract (game-state marts, < 1 MB)
+!powerbi/data/*.csv
 
 # Spark
 spark-warehouse/

@@ -11,6 +11,7 @@ The whole pipeline also runs **locally with no AWS account**: Spark reads and wr
 | Extract → PySpark → dbt star schema | ✅ Runs end to end locally and in CI on real StatsBomb data; all 165 dbt checks pass |
 | Airflow DAG and Docker image | ✅ DAG integrity tests and the image build run in CI |
 | Terraform | ⚠️ **Validated, not deployed.** CI runs `terraform fmt -check` and `terraform validate`, but `terraform apply` has not been run against a real AWS account |
+| Game-state marts + Power BI extract | ✅ Built and tested on all 64 World Cup 2022 matches; dashboard build guide in [`powerbi/`](powerbi/BUILD_GUIDE.md) |
 | Glue job and Athena (dbt `athena` target) | ⚠️ **Untested on AWS.** The same Spark script runs locally and the dbt project parses under the Athena adapter, but neither has run on Glue or Athena |
 
 Things to verify on a first real deploy: IAM permissions for the Glue job and for dbt on Athena, Iceberg table creation by dbt-athena, and Glue 5.0 reading the raw JSON from S3.
@@ -105,6 +106,29 @@ limit 5;
 | Kylian Mbappé | France | 4 | 1.78 | 0 | 552 |
 
 Kane's 6 goals match his real 2018 Golden Boot.
+
+## 📊 Power BI: how the scoreline changes the way teams play
+
+A **game-state** layer tags every event with the score from the acting team's point of view
+(Losing by 2+ … Winning by 2+). It feeds a Power BI dashboard built on the 2022 World Cup:
+
+| (all 64 matches, per 90 min in state) | Losing by 1 | Drawing | Winning by 1 |
+|---|---|---|---|
+| Possession (pass share) | 55.8% | 50.0% | 44.2% |
+| Pressing height (pitch x, 0–120) | 58.6 | 57.0 | 53.8 |
+| xG per shot | 0.116 | 0.098 | 0.125 |
+| xG conceded per 90 | 1.06 | 0.97 | **1.26** |
+
+Teams protecting a one-goal lead give up the ball, press deeper and create better chances,
+yet concede **30% more xG** than when level. (This is an association, not proof of cause:
+better teams lead more often.)
+
+* Models: `int_event_game_state` → `fct_team_game_state` (match × team × state, additive measures),
+  `fct_shots`, `dim_game_state`, `dim_match`. Two singular tests check that per-state goals, shots and
+  xG reconcile to `fct_matches`, and that opposing teams' minutes in mirrored states match exactly.
+* `make powerbi-export` writes the marts to [`powerbi/data/`](powerbi/data) (412 KB of CSV).
+* [`powerbi/BUILD_GUIDE.md`](powerbi/BUILD_GUIDE.md) is a step-by-step guide to building the report: star schema,
+  DAX measures, theme ([`game_state_theme.json`](powerbi/game_state_theme.json)), and a pitch background for the shot map.
 
 ## 🧪 Testing
 

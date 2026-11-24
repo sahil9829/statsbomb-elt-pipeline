@@ -7,7 +7,7 @@ TF_ENV         ?= dev
 export DBT_PROFILES_DIR   := $(CURDIR)/dbt
 export DBT_PROCESSED_ROOT := $(abspath $(LAKE_ROOT))/processed/statsbomb
 
-.PHONY: help install lint test extract transform dbt-deps dbt-build dbt-docs pipeline \
+.PHONY: help install lint test extract transform dbt-deps dbt-build dbt-docs pipeline powerbi-export \
         up down tf-init tf-plan tf-apply clean
 
 help:  ## Show this help
@@ -39,6 +39,9 @@ dbt-docs:  ## Generate and serve dbt docs (lineage graph) on :8081
 	cd dbt && dbt docs generate --target duckdb && dbt docs serve --port 8081
 
 pipeline: extract transform dbt-build  ## Full local run: extract -> Spark -> dbt
+
+powerbi-export:  ## Export the game-state marts to powerbi/data/*.csv
+	python powerbi/export_powerbi_data.py
 
 up:  ## Start Airflow (http://localhost:8080, airflow/airflow)
 	mkdir -p logs plugins data_lake
